@@ -58,11 +58,13 @@ func findNetworkIDByIP(ip string) (int, error) {
 	return link.Attrs().NetNsID, nil
 }
 
-func getLinkWithDestinationOf(ip string) (netlink.Link, error) {
-	routes, err := netlink.RouteListFiltered(
-		netlink.FAMILY_V4,
-		&netlink.Route{Dst: &net.IPNet{IP: net.ParseIP(ip), Mask: net.CIDRMask(32, 32)}},
-		netlink.RT_FILTER_DST)
+func getLinkWithDestinationOf(ipStr string) (netlink.Link, error) {
+	ip := net.ParseIP(ipStr)
+	if ip == nil {
+		return nil, fmt.Errorf("invalid pod IP address: %s", ipStr)
+	}
+
+	routes, err := netlink.RouteGet(ip)
 	if err != nil {
 		return nil, err
 	}
@@ -88,8 +90,7 @@ func getLinkWithDestinationOf(ip string) (netlink.Link, error) {
 //
 // Instead, we traverse the procfs. Comments on this method are inline.
 func getPodNetNs(pod *corev1.Pod) (string, error) {
-	// First, find the network namespace id by looking the interface with the given Pod IP.
-	// This could break on some platforms if they do not have an interface-per-pod.
+	// First, find the network namespace id by looking up the interface routed to for the given Pod IP.
 	wantID, err := findNetworkIDByIP(pod.Status.PodIP)
 	if err != nil {
 		return "", fmt.Errorf("network id: %v", err)
